@@ -92,7 +92,7 @@ def generate_answer(query, top_k=3):
 
     # Step 3: prompt
     prompt = f"""
-You are a helpful assistant.
+You are a helpful assistant .
 
 Answer ONLY from the context below.
 If the answer is not in the context, say "I don't know".
