@@ -2,8 +2,8 @@ import requests
 from sqlalchemy import create_engine, text
 
 # 🔹 CONFIG
-API_KEY = "AIzaSyBypUJ0ByWRmKbUJWXpKJPlRYB2_BQu6mY"
-DATABASE_URL = "postgresql://neondb_owner:npg_QDnPvoEbce08@ep-still-hall-a1wp7idw-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+API_KEY = "YOUR_GEMINI_API_KEY"
+DATABASE_URL = "YOUR_NEON_DB_URL"
 import requests
 from sqlalchemy import create_engine, text
 
