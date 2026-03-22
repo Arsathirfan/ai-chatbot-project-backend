@@ -1,9 +1,11 @@
+import os
+
 import requests
 from sqlalchemy import create_engine, text
 
 # 🔹 CONFIG
-API_KEY = "YOUR_GEMINI_API_KEY"
-DATABASE_URL = "YOUR_NEON_DB_URL"
+API_KEY = os.getenv("GEMINI_API_KEY")
+DATABASE_URL = os.getenv("NEON_DB_URL")
 import requests
 from sqlalchemy import create_engine, text
 

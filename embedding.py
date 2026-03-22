@@ -1,6 +1,8 @@
+import os
+
 import requests
 
-API_KEY = "YOUR_GEMINI_API_KEY"
+API_KEY = os.getenv("GEMINI_API_KEY")
 
 def get_embedding(text):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key={API_KEY}"
