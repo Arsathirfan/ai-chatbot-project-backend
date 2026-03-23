@@ -14,9 +14,7 @@ load_dotenv()
 
 app = FastAPI(title="AI ChatBot API")
 
-# Export app as a global variable for Vercel's Python runtime
-handler = app
-
+# Vercel looks for 'app' by default
 # --- Models ---
 class DocumentInput(BaseModel):
     documents: List[str]
@@ -73,4 +71,5 @@ def api_direct_llm(input_data: DirectLLMInput):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    # This only runs locally
+    uvicorn.run("main:app", host="0.0.0.0", port=8001, reload=True)
