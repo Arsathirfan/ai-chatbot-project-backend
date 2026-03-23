@@ -1,37 +1,71 @@
 import os
+from typing import List
 from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 
-from rag import generate_answer
+# Import our existing functions
+from rag import insert_documents, search_similar, generate_answer
+from llm import generate_llm_response
 
 load_dotenv()
 
-# ==========================================
-# 🔥 MAIN TEST
+app = FastAPI(title="AI ChatBot API")
+
+# --- Models ---
+class DocumentInput(BaseModel):
+    documents: List[str]
+
+class QueryInput(BaseModel):
+    query: str
+    top_k: int = 3
+
+class DirectLLMInput(BaseModel):
+    prompt: str
+
+# --- Endpoints ---
+
+@app.get("/")
+def read_root():
+    return {"status": "AI ChatBot API is running"}
+
+@app.post("/rag/insert")
+def api_insert_documents(input_data: DocumentInput):
+    """Endpoint to insert documents into the vector database (RAG)."""
+    try:
+        insert_documents(input_data.documents)
+        return {"message": "Documents inserted successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/rag/search")
+def api_search_rag(input_data: QueryInput):
+    """Endpoint to search similar documents in RAG and get a context-aware response."""
+    try:
+        # This uses the full RAG pipeline (search + generate)
+        answer = generate_answer(input_data.query, top_k=input_data.top_k)
+        # We can also return the raw search results if needed
+        raw_results = search_similar(input_data.query, top_k=input_data.top_k)
+        return {
+            "query": input_data.query,
+            "answer": answer,
+            "sources": raw_results
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/llm/direct")
+def api_direct_llm(input_data: DirectLLMInput):
+    """Endpoint to use the LLM directly without RAG context."""
+    try:
+        response = generate_llm_response(input_data.prompt)
+        return {
+            "prompt": input_data.prompt,
+            "response": response
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 if __name__ == "__main__":
-
-    # 🔹 Step 1: Insert data (run once)
-    # docs = [
-    #     "Photosynthesis is how plants make food using sunlight.",
-    #     "Plants convert sunlight into chemical energy.",
-    #     "Java is a backend programming language.",
-    #     "The human heart pumps blood.",
-    #     "Flutter is used for mobile app development.",
-    #     "Python is used in AI and machine learning."
-    # ]
-    #
-    # insert_documents(docs)
-    #
-    # print("\n========================")
-    # print("🤖 RAG CHAT TEST")
-    # print("========================\n")
-
-    while True:
-        query = input("You: ")
-
-        if query.lower() in ["exit", "quit"]:
-            break
-
-        answer = generate_answer(query)
-
-        print("\nBot:", answer)
-        print("\n----------------------\n")
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8001)
