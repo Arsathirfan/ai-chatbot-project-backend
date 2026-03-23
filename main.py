@@ -8,11 +8,19 @@ from pydantic import BaseModel
 from rag import insert_documents, search_similar, generate_answer
 from llm import generate_llm_response
 
+# Import analytics middleware
+from analytics_middleware import AnalyticsMiddleware
+from analytics_config import config as analytics_config
+
 # Load .env only if it exists (for local dev)
 # In Vercel, env vars are injected directly
 load_dotenv()
 
 app = FastAPI(title="AI ChatBot API")
+
+# Add analytics middleware
+if analytics_config.enabled:
+    app.add_middleware(AnalyticsMiddleware)
 
 # Vercel looks for 'app' by default
 # --- Models ---
