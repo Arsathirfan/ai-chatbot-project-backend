@@ -1,13 +1,22 @@
-from typing import List
+from typing import List, Optional
 import os
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Security, Depends
+from fastapi import FastAPI, HTTPException, Security, Depends, File, UploadFile
 from fastapi.security.api_key import APIKeyHeader
 from pydantic import BaseModel
 from starlette.status import HTTP_403_FORBIDDEN
 
 # Import our existing functions
-from rag import insert_documents, search_similar, generate_answer
+from rag import (
+    insert_documents, 
+    search_similar, 
+    generate_answer, 
+    ingest_file, 
+    get_files, 
+    get_file_details, 
+    delete_file,
+    extract_text_from_pdf
+)
 from llm import generate_llm_response
 
 # Load .env only if it exists (for local dev)
@@ -38,9 +47,14 @@ def get_api_key(header_key: str = Security(api_key_header)):
 class DocumentInput(BaseModel):
     documents: List[str]
 
+class FileIngestInput(BaseModel):
+    text: str
+    filename: str
+
 class QueryInput(BaseModel):
     query: str
     top_k: int = 3
+    file_id: Optional[str] = None
 
 class DirectLLMInput(BaseModel):
     prompt: str
@@ -50,6 +64,58 @@ class DirectLLMInput(BaseModel):
 @app.get("/")
 def read_root():
     return {"status": "AI ChatBot API is running"}
+
+@app.post("/rag/ingest")
+async def api_ingest_file(
+    file: UploadFile = File(...), 
+    api_key: str = Depends(get_api_key)
+):
+    """Endpoint to upload and ingest a file (PDF or TXT)."""
+    try:
+        content = await file.read()
+        filename = file.filename
+        
+        if filename.lower().endswith(".pdf"):
+            text_content = extract_text_from_pdf(content)
+        else:
+            # Assume text for other formats
+            text_content = content.decode("utf-8")
+
+        file_id = ingest_file(text_content, filename)
+        return {"file_id": file_id, "filename": filename, "message": "File ingested successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/rag/files")
+def api_get_files(api_key: str = Depends(get_api_key)):
+    """Endpoint to list all ingested files."""
+    try:
+        files = get_files()
+        return {"files": files}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/rag/files/{file_id}")
+def api_get_file_details(file_id: str, api_key: str = Depends(get_api_key)):
+    """Endpoint to get chunks and metadata for a specific file."""
+    try:
+        details = get_file_details(file_id)
+        if not details:
+            raise HTTPException(status_code=404, detail="File not found")
+        return details
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/rag/files/{file_id}")
+def api_delete_file(file_id: str, api_key: str = Depends(get_api_key)):
+    """Endpoint to delete a file and its chunks."""
+    try:
+        delete_file(file_id)
+        return {"message": f"File {file_id} deleted successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/rag/insert")
 def api_insert_documents(input_data: DocumentInput, api_key: str = Depends(get_api_key)):
@@ -62,16 +128,13 @@ def api_insert_documents(input_data: DocumentInput, api_key: str = Depends(get_a
 
 @app.post("/rag/search")
 def api_search_rag(input_data: QueryInput, api_key: str = Depends(get_api_key)):
-    """Endpoint to search similar documents in RAG and get a context-aware response."""
+    """Endpoint to search similar documents. Optional filter by file_id."""
     try:
-        # This uses the full RAG pipeline (search + generate)
-        # Now returns {"text": "...", "usage": {...}}
-        llm_res = generate_answer(input_data.query, top_k=input_data.top_k)
-        
-        # We can also return the raw search results if needed
-        raw_results = search_similar(input_data.query, top_k=input_data.top_k)
+        llm_res = generate_answer(input_data.query, top_k=input_data.top_k, file_id=input_data.file_id)
+        raw_results = search_similar(input_data.query, top_k=input_data.top_k, file_id=input_data.file_id)
         return {
             "query": input_data.query,
+            "file_id_filter": input_data.file_id,
             "answer": llm_res["text"],
             "usage": llm_res["usage"],
             "sources": raw_results
