@@ -1,7 +1,7 @@
 from typing import List, Optional
 import os
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Security, Depends, File, UploadFile
+from fastapi import FastAPI, HTTPException, Security, Depends, File, UploadFile, Form
 from fastapi.security.api_key import APIKeyHeader
 from pydantic import BaseModel
 from starlette.status import HTTP_403_FORBIDDEN
@@ -53,6 +53,7 @@ class FileIngestInput(BaseModel):
 
 class QueryInput(BaseModel):
     query: str
+    user_id: str
     top_k: int = 3
     file_id: Optional[str] = None
 
@@ -68,9 +69,10 @@ def read_root():
 @app.post("/rag/ingest")
 async def api_ingest_file(
     file: UploadFile = File(...), 
+    user_id: str = Form(...),
     api_key: str = Depends(get_api_key)
 ):
-    """Endpoint to upload and ingest a file (PDF or TXT)."""
+    """Endpoint to upload and ingest a file (PDF or TXT). user_id is mandatory."""
     try:
         content = await file.read()
         filename = file.filename
@@ -81,27 +83,32 @@ async def api_ingest_file(
             # Assume text for other formats
             text_content = content.decode("utf-8")
 
-        file_id = ingest_file(text_content, filename)
-        return {"file_id": file_id, "filename": filename, "message": "File ingested successfully"}
+        file_id = ingest_file(text_content, filename, user_id=user_id)
+        return {
+            "file_id": file_id, 
+            "user_id": user_id,
+            "filename": filename, 
+            "message": "File ingested successfully"
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/rag/files")
-def api_get_files(api_key: str = Depends(get_api_key)):
-    """Endpoint to list all ingested files."""
+def api_get_files(user_id: str, api_key: str = Depends(get_api_key)):
+    """Endpoint to list all ingested files for a specific user_id."""
     try:
-        files = get_files()
+        files = get_files(user_id=user_id)
         return {"files": files}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/rag/files/{file_id}")
-def api_get_file_details(file_id: str, api_key: str = Depends(get_api_key)):
-    """Endpoint to get chunks and metadata for a specific file."""
+def api_get_file_details(file_id: str, user_id: str, api_key: str = Depends(get_api_key)):
+    """Endpoint to get chunks and metadata for a specific file belonging to a user."""
     try:
-        details = get_file_details(file_id)
+        details = get_file_details(file_id, user_id=user_id)
         if not details:
-            raise HTTPException(status_code=404, detail="File not found")
+            raise HTTPException(status_code=404, detail="File not found or access denied")
         return details
     except HTTPException as he:
         raise he
@@ -119,7 +126,7 @@ def api_delete_file(file_id: str, api_key: str = Depends(get_api_key)):
 
 @app.post("/rag/insert")
 def api_insert_documents(input_data: DocumentInput, api_key: str = Depends(get_api_key)):
-    """Endpoint to insert documents into the vector database (RAG)."""
+    """Endpoint to insert documents into the vector database (RAG). Global documents."""
     try:
         insert_documents(input_data.documents)
         return {"message": "Documents inserted successfully"}
@@ -128,12 +135,23 @@ def api_insert_documents(input_data: DocumentInput, api_key: str = Depends(get_a
 
 @app.post("/rag/search")
 def api_search_rag(input_data: QueryInput, api_key: str = Depends(get_api_key)):
-    """Endpoint to search similar documents. Optional filter by file_id."""
+    """Endpoint to search similar documents. Mandatory user_id filter."""
     try:
-        llm_res = generate_answer(input_data.query, top_k=input_data.top_k, file_id=input_data.file_id)
-        raw_results = search_similar(input_data.query, top_k=input_data.top_k, file_id=input_data.file_id)
+        llm_res = generate_answer(
+            input_data.query, 
+            user_id=input_data.user_id,
+            top_k=input_data.top_k, 
+            file_id=input_data.file_id
+        )
+        raw_results = search_similar(
+            input_data.query, 
+            user_id=input_data.user_id,
+            top_k=input_data.top_k, 
+            file_id=input_data.file_id
+        )
         return {
             "query": input_data.query,
+            "user_id_filter": input_data.user_id,
             "file_id_filter": input_data.file_id,
             "answer": llm_res["text"],
             "usage": llm_res["usage"],

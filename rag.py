@@ -37,7 +37,7 @@ def chunk_text(text, chunk_size=1000, overlap=100):
 
 
 # 🔹 INGEST FILE FUNCTION
-def ingest_file(text_content, filename):
+def ingest_file(text_content, filename, user_id):
     file_id = str(uuid.uuid4())
     uploaded_at = datetime.utcnow().isoformat()
 
@@ -57,6 +57,7 @@ def ingest_file(text_content, filename):
                     "embedding": embedding,
                     "metadata": json.dumps({
                         "file_id": file_id,
+                        "user_id": user_id,
                         "filename": filename,
                         "chunk_id": i,
                         "uploaded_at": uploaded_at
@@ -70,24 +71,27 @@ def ingest_file(text_content, filename):
 
 
 # 🔹 GET FILES FUNCTION
-def get_files():
+def get_files(user_id):
     with engine.connect() as conn:
-        result = conn.execute(
-            text("""
+        query = """
             SELECT 
                 metadata->>'file_id' AS file_id, 
                 metadata->>'filename' AS filename, 
-                metadata->>'uploaded_at' AS uploaded_at
+                metadata->>'uploaded_at' AS uploaded_at,
+                metadata->>'user_id' AS user_id
             FROM documents
-            WHERE metadata IS NOT NULL
-            GROUP BY file_id, filename, uploaded_at
+            WHERE metadata->>'user_id' = :user_id
+            GROUP BY file_id, filename, uploaded_at, user_id
             ORDER BY uploaded_at DESC
-            """)
-        )
+        """
+        params = {"user_id": user_id}
+        
+        result = conn.execute(text(query), params)
 
         return [
             {
                 "file_id": row.file_id,
+                "user_id": row.user_id,
                 "filename": row.filename,
                 "uploaded_at": row.uploaded_at
             }
@@ -96,21 +100,23 @@ def get_files():
 
 
 # 🔹 GET FILE DETAILS
-def get_file_details(file_id):
+def get_file_details(file_id, user_id):
     with engine.connect() as conn:
-        result = conn.execute(
-            text("""
+        query = """
             SELECT content, metadata
             FROM documents
             WHERE metadata->>'file_id' = :file_id
+            AND metadata->>'user_id' = :user_id
             ORDER BY (metadata->>'chunk_id')::int ASC
-            """),
-            {"file_id": file_id}
-        )
+        """
+        params = {"file_id": file_id, "user_id": user_id}
+        
+        result = conn.execute(text(query), params)
 
         chunks = []
         filename = None
         uploaded_at = None
+        retrieved_user_id = None
 
         for row in result:
             meta = row.metadata
@@ -120,6 +126,7 @@ def get_file_details(file_id):
             if not filename:
                 filename = meta.get("filename")
                 uploaded_at = meta.get("uploaded_at")
+                retrieved_user_id = meta.get("user_id")
             chunks.append(row.content)
 
         if not chunks:
@@ -127,6 +134,7 @@ def get_file_details(file_id):
 
         return {
             "file_id": file_id,
+            "user_id": retrieved_user_id,
             "filename": filename,
             "uploaded_at": uploaded_at,
             "chunk_count": len(chunks),
@@ -168,21 +176,23 @@ def insert_documents(documents):
 
 
 # 🔹 SEARCH FUNCTION
-def search_similar(query, top_k=3, file_id=None):
+def search_similar(query, user_id, top_k=3, file_id=None):
     query_embedding = get_embedding(query)
 
     query_str = """
         SELECT content, metadata, embedding <-> CAST(:query_embedding AS vector) AS distance
         FROM documents
+        WHERE metadata->>'user_id' = :user_id
     """
 
     params = {
         "query_embedding": query_embedding,
-        "top_k": top_k
+        "top_k": top_k,
+        "user_id": user_id
     }
 
     if file_id:
-        query_str += " WHERE metadata->>'file_id' = :file_id"
+        query_str += " AND metadata->>'file_id' = :file_id"
         params["file_id"] = file_id
 
     query_str += """
@@ -200,9 +210,8 @@ def search_similar(query, top_k=3, file_id=None):
 
 
 # 🔥 RAG FUNCTION
-def generate_answer(query, top_k=3, file_id=None):
-    results = search_similar(query, top_k, file_id)
-
+def generate_answer(query, user_id, top_k=3, file_id=None):
+    results = search_similar(query, user_id, top_k, file_id)
     context = "\n".join([r["content"] for r in results])
 
     if not context:
