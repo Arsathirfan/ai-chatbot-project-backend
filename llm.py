@@ -27,6 +27,14 @@ def generate_llm_response(prompt):
     data = response.json()
 
     try:
-        return data["candidates"][0]["content"]["parts"][0]["text"]
+        text = data["candidates"][0]["content"]["parts"][0]["text"]
+        usage = data.get("usageMetadata", {})
+        return {
+            "text": text,
+            "usage": usage
+        }
     except:
-        return "Error generating response"
+        return {
+            "text": "Error generating response",
+            "usage": {}
+        }

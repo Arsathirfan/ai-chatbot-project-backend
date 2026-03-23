@@ -1,4 +1,3 @@
-import os
 from typing import List
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -54,12 +53,15 @@ def api_search_rag(input_data: QueryInput):
     """Endpoint to search similar documents in RAG and get a context-aware response."""
     try:
         # This uses the full RAG pipeline (search + generate)
-        answer = generate_answer(input_data.query, top_k=input_data.top_k)
+        # Now returns {"text": "...", "usage": {...}}
+        llm_res = generate_answer(input_data.query, top_k=input_data.top_k)
+        
         # We can also return the raw search results if needed
         raw_results = search_similar(input_data.query, top_k=input_data.top_k)
         return {
             "query": input_data.query,
-            "answer": answer,
+            "answer": llm_res["text"],
+            "usage": llm_res["usage"],
             "sources": raw_results
         }
     except Exception as e:
@@ -69,10 +71,11 @@ def api_search_rag(input_data: QueryInput):
 def api_direct_llm(input_data: DirectLLMInput):
     """Endpoint to use the LLM directly without RAG context."""
     try:
-        response = generate_llm_response(input_data.prompt)
+        llm_res = generate_llm_response(input_data.prompt)
         return {
             "prompt": input_data.prompt,
-            "response": response
+            "response": llm_res["text"],
+            "usage": llm_res["usage"]
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
