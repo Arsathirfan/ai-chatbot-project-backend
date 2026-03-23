@@ -8,9 +8,14 @@ from pydantic import BaseModel
 from rag import insert_documents, search_similar, generate_answer
 from llm import generate_llm_response
 
+# Load .env only if it exists (for local dev)
+# In Vercel, env vars are injected directly
 load_dotenv()
 
 app = FastAPI(title="AI ChatBot API")
+
+# Export app as a global variable for Vercel's Python runtime
+handler = app
 
 # --- Models ---
 class DocumentInput(BaseModel):
