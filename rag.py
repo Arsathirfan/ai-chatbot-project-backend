@@ -166,9 +166,9 @@ def delete_all_user_data(user_id):
 
 
 # 🔹 SEARCH FUNCTION
-def search_similar(query, user_id, top_k, file_ids):
-    """Search similar documents. user_id and file_ids (list) are strictly mandatory."""
-    if not user_id or not file_ids:
+def search_similar(query, user_id, top_k, file_ids=None):
+    """Search similar documents. user_id is strictly mandatory. file_ids (list) is optional."""
+    if not user_id:
         return []
 
     query_embedding = get_embedding(query)
@@ -177,19 +177,21 @@ def search_similar(query, user_id, top_k, file_ids):
         SELECT content, metadata, embedding <-> CAST(:query_embedding AS vector) AS distance
         FROM documents
         WHERE metadata->>'user_id' = :user_id
-        AND metadata->>'file_id' = ANY(:file_ids)
     """
-
-    # Check if file_ids is a single string and convert to list if so
-    if isinstance(file_ids, str):
-        file_ids = [file_ids]
 
     params = {
         "query_embedding": query_embedding,
         "top_k": top_k,
-        "user_id": user_id,
-        "file_ids": file_ids
+        "user_id": user_id
     }
+
+    if file_ids:
+        # Check if file_ids is a single string and convert to list if so
+        if isinstance(file_ids, str):
+            file_ids = [file_ids]
+        
+        query_str += " AND metadata->>'file_id' = ANY(:file_ids)"
+        params["file_ids"] = file_ids
 
     query_str += """
         ORDER BY embedding <-> CAST(:query_embedding AS vector)
@@ -206,7 +208,7 @@ def search_similar(query, user_id, top_k, file_ids):
 
 
 # 🔥 RAG FUNCTION
-def generate_answer(query, user_id, top_k, file_ids, chat_history=None):
+def generate_answer(query, user_id, top_k, file_ids=None, chat_history=None):
     results = search_similar(query, user_id, top_k, file_ids)
     context = "\n".join([r["content"] for r in results])
 

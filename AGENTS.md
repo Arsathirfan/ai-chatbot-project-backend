@@ -32,14 +32,14 @@ curl -X 'DELETE' 'http://localhost:8001/rag/user/user123' -H 'X-API-Key: KEY'
 
 ### Search & Chat (RAG)
 **Endpoint:** `POST /rag/search`
-**Description:** The core feature. Search for context across specific files for a user. Supports optional chat history for conversation awareness.
+**Description:** The core feature. Search for context across specific files OR all files for a user. Supports optional chat history for conversation awareness.
 - **Payload:**
 ```json
 {
   "query": "Your question here",
   "user_id": "user123",
   "top_k": 3,
-  "file_ids": ["id1", "id2"], // Mandatory: List of file IDs to search.
+  "file_ids": ["id1", "id2"], // Optional: List of file IDs. If omitted/null, searches ALL of this user's data.
   "chat_history": [           // Optional: Previous conversation context.
     {"role": "user", "content": "Hello"},
     {"role": "assistant", "content": "Hi, how can I help?"}

@@ -59,7 +59,7 @@ class QueryInput(BaseModel):
     query: str
     user_id: str
     top_k: int = 3
-    file_ids: List[str]
+    file_ids: Optional[List[str]] = None
     chat_history: Optional[List[ChatMessage]] = None
 
 class DirectLLMInput(BaseModel):
