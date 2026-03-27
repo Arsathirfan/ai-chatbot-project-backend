@@ -206,21 +206,33 @@ def search_similar(query, user_id, top_k, file_ids):
 
 
 # 🔥 RAG FUNCTION
-def generate_answer(query, user_id, top_k, file_ids):
+def generate_answer(query, user_id, top_k, file_ids, chat_history=None):
     results = search_similar(query, user_id, top_k, file_ids)
     context = "\n".join([r["content"] for r in results])
 
     if not context:
         return {"text": "I don't know (no relevant context found).", "usage": {"inputTokens": 0, "outputTokens": 0}}
 
+    # Format Chat History if present
+    history_str = ""
+    if chat_history:
+        history_str = "\n--- Chat History ---\n"
+        for msg in chat_history:
+            # Handle Pydantic model or dict
+            role = msg.role if hasattr(msg, 'role') else msg.get('role', 'unknown')
+            content = msg.content if hasattr(msg, 'content') else msg.get('content', '')
+            history_str += f"{role.capitalize()}: {content}\n"
+
     prompt = f"""
 You are a helpful assistant.
 
 Answer ONLY from the context below.
+Use the provided chat history to understand the flow of the conversation.
 If the answer is not in the context, say "I don't know".
 
 Context:
 {context}
+{history_str}
 
 Question:
 {query}

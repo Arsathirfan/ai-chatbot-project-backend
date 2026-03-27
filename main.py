@@ -52,11 +52,16 @@ class FileIngestInput(BaseModel):
     text: str
     filename: str
 
+class ChatMessage(BaseModel):
+    role: str # "user" or "assistant"
+    content: str
+
 class QueryInput(BaseModel):
     query: str
     user_id: str
     top_k: int = 3
     file_ids: List[str]
+    chat_history: Optional[List[ChatMessage]] = None
 
 class DirectLLMInput(BaseModel):
     prompt: str
@@ -142,7 +147,8 @@ def api_search_rag(input_data: QueryInput, api_key: str = Depends(get_api_key)):
             input_data.query, 
             user_id=input_data.user_id,
             top_k=input_data.top_k, 
-            file_ids=input_data.file_ids
+            file_ids=input_data.file_ids,
+            chat_history=input_data.chat_history
         )
         raw_results = search_similar(
             input_data.query, 
