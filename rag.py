@@ -165,51 +165,31 @@ def delete_all_user_data(user_id):
     return True
 
 
-# 🔹 INSERT FUNCTION
-def insert_documents(documents):
-    with engine.connect() as conn:
-        for doc in documents:
-            embedding = get_embedding(doc)
-
-            conn.execute(
-                text("""
-                INSERT INTO documents (content, embedding)
-                VALUES (:content, :embedding)
-                """),
-                {
-                    "content": doc,
-                    "embedding": embedding
-                }
-            )
-
-        conn.commit()
-
-    print("✅ Documents inserted")
-
-
 # 🔹 SEARCH FUNCTION
-def search_similar(query, user_id, top_k=3, file_ids=None):
+def search_similar(query, user_id, top_k, file_ids):
+    """Search similar documents. user_id and file_ids (list) are strictly mandatory."""
+    if not user_id or not file_ids:
+        return []
+
     query_embedding = get_embedding(query)
 
     query_str = """
         SELECT content, metadata, embedding <-> CAST(:query_embedding AS vector) AS distance
         FROM documents
         WHERE metadata->>'user_id' = :user_id
+        AND metadata->>'file_id' = ANY(:file_ids)
     """
+
+    # Check if file_ids is a single string and convert to list if so
+    if isinstance(file_ids, str):
+        file_ids = [file_ids]
 
     params = {
         "query_embedding": query_embedding,
         "top_k": top_k,
-        "user_id": user_id
+        "user_id": user_id,
+        "file_ids": file_ids
     }
-
-    if file_ids:
-        # Check if file_ids is a single string and convert to list if so
-        if isinstance(file_ids, str):
-            file_ids = [file_ids]
-        
-        query_str += " AND metadata->>'file_id' = ANY(:file_ids)"
-        params["file_ids"] = file_ids
 
     query_str += """
         ORDER BY embedding <-> CAST(:query_embedding AS vector)
@@ -226,7 +206,7 @@ def search_similar(query, user_id, top_k=3, file_ids=None):
 
 
 # 🔥 RAG FUNCTION
-def generate_answer(query, user_id, top_k=3, file_ids=None):
+def generate_answer(query, user_id, top_k, file_ids):
     results = search_similar(query, user_id, top_k, file_ids)
     context = "\n".join([r["content"] for r in results])
 

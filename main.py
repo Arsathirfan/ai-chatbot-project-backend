@@ -56,7 +56,7 @@ class QueryInput(BaseModel):
     query: str
     user_id: str
     top_k: int = 3
-    file_ids: Optional[List[str]] = None
+    file_ids: List[str]
 
 class DirectLLMInput(BaseModel):
     prompt: str
@@ -131,15 +131,6 @@ def api_delete_user_data(user_id: str, api_key: str = Depends(get_api_key)):
     try:
         delete_all_user_data(user_id)
         return {"message": f"All data for user {user_id} deleted successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/rag/insert")
-def api_insert_documents(input_data: DocumentInput, api_key: str = Depends(get_api_key)):
-    """Endpoint to insert documents into the vector database (RAG). Global documents."""
-    try:
-        insert_documents(input_data.documents)
-        return {"message": "Documents inserted successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
