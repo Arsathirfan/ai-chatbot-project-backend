@@ -15,6 +15,7 @@ from rag import (
     get_files, 
     get_file_details, 
     delete_file,
+    delete_all_user_data,
     extract_text_from_pdf
 )
 from llm import generate_llm_response
@@ -55,7 +56,7 @@ class QueryInput(BaseModel):
     query: str
     user_id: str
     top_k: int = 3
-    file_id: Optional[str] = None
+    file_ids: Optional[List[str]] = None
 
 class DirectLLMInput(BaseModel):
     prompt: str
@@ -124,6 +125,15 @@ def api_delete_file(file_id: str, api_key: str = Depends(get_api_key)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.delete("/rag/user/{user_id}")
+def api_delete_user_data(user_id: str, api_key: str = Depends(get_api_key)):
+    """Endpoint to delete all data and chunks for a specific user ID."""
+    try:
+        delete_all_user_data(user_id)
+        return {"message": f"All data for user {user_id} deleted successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/rag/insert")
 def api_insert_documents(input_data: DocumentInput, api_key: str = Depends(get_api_key)):
     """Endpoint to insert documents into the vector database (RAG). Global documents."""
@@ -141,18 +151,18 @@ def api_search_rag(input_data: QueryInput, api_key: str = Depends(get_api_key)):
             input_data.query, 
             user_id=input_data.user_id,
             top_k=input_data.top_k, 
-            file_id=input_data.file_id
+            file_ids=input_data.file_ids
         )
         raw_results = search_similar(
             input_data.query, 
             user_id=input_data.user_id,
             top_k=input_data.top_k, 
-            file_id=input_data.file_id
+            file_ids=input_data.file_ids
         )
         return {
             "query": input_data.query,
             "user_id_filter": input_data.user_id,
-            "file_id_filter": input_data.file_id,
+            "file_ids_filter": input_data.file_ids,
             "answer": llm_res["text"],
             "usage": llm_res["usage"],
             "sources": raw_results

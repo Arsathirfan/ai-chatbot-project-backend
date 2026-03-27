@@ -153,6 +153,18 @@ def delete_file(file_id):
     return True
 
 
+# 🔹 DELETE ALL USER DATA
+def delete_all_user_data(user_id):
+    """Deletes all documents/chunks belonging to a specific user_id."""
+    with engine.connect() as conn:
+        conn.execute(
+            text("DELETE FROM documents WHERE metadata->>'user_id' = :user_id"),
+            {"user_id": user_id}
+        )
+        conn.commit()
+    return True
+
+
 # 🔹 INSERT FUNCTION
 def insert_documents(documents):
     with engine.connect() as conn:
@@ -176,7 +188,7 @@ def insert_documents(documents):
 
 
 # 🔹 SEARCH FUNCTION
-def search_similar(query, user_id, top_k=3, file_id=None):
+def search_similar(query, user_id, top_k=3, file_ids=None):
     query_embedding = get_embedding(query)
 
     query_str = """
@@ -191,9 +203,13 @@ def search_similar(query, user_id, top_k=3, file_id=None):
         "user_id": user_id
     }
 
-    if file_id:
-        query_str += " AND metadata->>'file_id' = :file_id"
-        params["file_id"] = file_id
+    if file_ids:
+        # Check if file_ids is a single string and convert to list if so
+        if isinstance(file_ids, str):
+            file_ids = [file_ids]
+        
+        query_str += " AND metadata->>'file_id' = ANY(:file_ids)"
+        params["file_ids"] = file_ids
 
     query_str += """
         ORDER BY embedding <-> CAST(:query_embedding AS vector)
@@ -210,8 +226,8 @@ def search_similar(query, user_id, top_k=3, file_id=None):
 
 
 # 🔥 RAG FUNCTION
-def generate_answer(query, user_id, top_k=3, file_id=None):
-    results = search_similar(query, user_id, top_k, file_id)
+def generate_answer(query, user_id, top_k=3, file_ids=None):
+    results = search_similar(query, user_id, top_k, file_ids)
     context = "\n".join([r["content"] for r in results])
 
     if not context:
