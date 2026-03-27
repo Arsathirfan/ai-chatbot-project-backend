@@ -8,7 +8,6 @@ from starlette.status import HTTP_403_FORBIDDEN
 
 # Import our existing functions
 from rag import (
-    insert_documents, 
     search_similar, 
     generate_answer, 
     ingest_file, 
