@@ -18,6 +18,14 @@ from rag import (
     extract_text_from_pdf
 )
 from llm import generate_llm_response
+from chat_db import (
+    create_chat_session, 
+    get_user_sessions, 
+    get_session_messages, 
+    save_chat_message, 
+    delete_chat_session, 
+    update_session_title
+)
 
 # Load .env only if it exists (for local dev)
 # In Vercel, env vars are injected directly
@@ -61,6 +69,10 @@ class QueryInput(BaseModel):
     top_k: int = 3
     file_ids: Optional[List[str]] = None
     chat_history: Optional[List[ChatMessage]] = None
+    session_id: Optional[str] = None
+
+class SessionTitleUpdate(BaseModel):
+    title: str
 
 class DirectLLMInput(BaseModel):
     prompt: str
@@ -70,6 +82,53 @@ class DirectLLMInput(BaseModel):
 @app.get("/")
 def read_root():
     return {"status": "AI ChatBot API is running"}
+
+# --- Chat Session Endpoints ---
+
+@app.post("/chat/sessions")
+def api_create_session(user_id: str, title: Optional[str] = "New Chat", api_key: str = Depends(get_api_key)):
+    """Creates a new chat session."""
+    try:
+        session_id = create_chat_session(user_id, title)
+        return {"session_id": session_id, "user_id": user_id, "title": title}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/chat/sessions")
+def api_get_sessions(user_id: str, api_key: str = Depends(get_api_key)):
+    """Lists all chat sessions for a user."""
+    try:
+        sessions = get_user_sessions(user_id)
+        return {"sessions": sessions}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/chat/sessions/{session_id}")
+def api_get_messages(session_id: str, api_key: str = Depends(get_api_key)):
+    """Retrieves all messages for a session."""
+    try:
+        messages = get_session_messages(session_id)
+        return {"messages": messages}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/chat/sessions/{session_id}")
+def api_delete_session(session_id: str, api_key: str = Depends(get_api_key)):
+    """Deletes a chat session."""
+    try:
+        delete_chat_session(session_id)
+        return {"message": "Session deleted"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.patch("/chat/sessions/{session_id}")
+def api_update_session_title(session_id: str, data: SessionTitleUpdate, api_key: str = Depends(get_api_key)):
+    """Updates the title of a chat session."""
+    try:
+        update_session_title(session_id, data.title)
+        return {"message": "Title updated"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/rag/ingest")
 async def api_ingest_file(
@@ -142,6 +201,7 @@ def api_delete_user_data(user_id: str, api_key: str = Depends(get_api_key)):
 def api_search_rag(input_data: QueryInput, api_key: str = Depends(get_api_key)):
     """Endpoint to search similar documents. Mandatory user_id filter."""
     try:
+        # 1. Generate Answer
         llm_res = generate_answer(
             input_data.query, 
             user_id=input_data.user_id,
@@ -149,16 +209,36 @@ def api_search_rag(input_data: QueryInput, api_key: str = Depends(get_api_key)):
             file_ids=input_data.file_ids,
             chat_history=input_data.chat_history
         )
+        
+        # 2. Search Sources (for UI reference)
         raw_results = search_similar(
             input_data.query, 
             user_id=input_data.user_id,
             top_k=input_data.top_k, 
             file_ids=input_data.file_ids
         )
+
+        # 3. If session_id is provided, save the turn to database
+        if input_data.session_id:
+            # Save User Message
+            save_chat_message(
+                session_id=input_data.session_id, 
+                role="user", 
+                content=input_data.query,
+                selected_files=input_data.file_ids
+            )
+            # Save Assistant Message
+            save_chat_message(
+                session_id=input_data.session_id, 
+                role="assistant", 
+                content=llm_res["text"]
+            )
+
         return {
             "query": input_data.query,
             "user_id_filter": input_data.user_id,
             "file_ids_filter": input_data.file_ids,
+            "session_id": input_data.session_id,
             "answer": llm_res["text"],
             "usage": llm_res["usage"],
             "sources": raw_results
